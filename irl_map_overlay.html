@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IRL Map Overlay</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+html,body{margin:0;padding:0;background:transparent;overflow:hidden;font-family:sans-serif}
+#wrap{
+  width:380px;height:380px;
+  border-radius:16px;
+  overflow:hidden;
+  background:rgba(0,0,0,.75);
+  position:relative;
+}
+#map{width:100%;height:100%;}
+#info{
+  position:absolute;
+  left:10px;bottom:10px;
+  background:rgba(0,0,0,.75);
+  color:#fff;
+  padding:8px 10px;
+  border-radius:10px;
+  font-size:14px;
+  z-index:9999;
+}
+#hidden{
+  display:none;
+  position:absolute;
+  inset:0;
+  background:rgba(0,0,0,.9);
+  color:white;
+  align-items:center;
+  justify-content:center;
+  font-size:24px;
+  z-index:10000;
+}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="map"></div>
+  <div id="info">GPS待機中...</div>
+  <div id="hidden">MAP HIDDEN</div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const map=L.map('map',{zoomControl:false,attributionControl:false});
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+let marker=null;
+let trail=[];
+let poly=L.polyline([],{}).addTo(map);
+
+const info=document.getElementById("info");
+const hidden=document.getElementById("hidden");
+
+const OFFSET_METERS=150;     // 位置ぼかし
+const HIDE_LAT=null;         // 自宅緯度を入れる
+const HIDE_LON=null;         // 自宅経度を入れる
+const HIDE_RADIUS=800;       // 自宅保護半径(m)
+
+function offset(lat,lon,m){
+ const dLat=m/111320;
+ const dLon=m/(111320*Math.cos(lat*Math.PI/180));
+ return [lat+dLat,lon+dLon];
+}
+
+function distance(lat1,lon1,lat2,lon2){
+ const R=6371000;
+ const dLat=(lat2-lat1)*Math.PI/180;
+ const dLon=(lon2-lon1)*Math.PI/180;
+ const a=Math.sin(dLat/2)**2+
+ Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*
+ Math.sin(dLon/2)**2;
+ return 2*R*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+navigator.geolocation.watchPosition(pos=>{
+ let lat=pos.coords.latitude;
+ let lon=pos.coords.longitude;
+
+ if(HIDE_LAT && HIDE_LON){
+   if(distance(lat,lon,HIDE_LAT,HIDE_LON)<HIDE_RADIUS){
+      hidden.style.display="flex";
+      return;
+   }
+ }
+ hidden.style.display="none";
+
+ [lat,lon]=offset(lat,lon,OFFSET_METERS);
+
+ const p=[lat,lon];
+
+ if(!marker){
+   marker=L.marker(p).addTo(map);
+   map.setView(p,16);
+ }else{
+   marker.setLatLng(p);
+   map.panTo(p);
+ }
+
+ trail.push(p);
+ if(trail.length>300) trail.shift();
+ poly.setLatLngs(trail);
+
+ const speed=(pos.coords.speed||0)*3.6;
+
+ info.innerHTML=`速度: ${speed.toFixed(1)} km/h`;
+
+},err=>{
+ info.innerHTML="GPSエラー: "+err.message;
+},{
+ enableHighAccuracy:true,
+ maximumAge:1000,
+ timeout:10000
+});
+</script>
+</body>
+</html>
